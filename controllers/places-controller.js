@@ -1,3 +1,5 @@
+const fs = require('fs');
+
 const { validationResult } = require('express-validator');
 const mongoose = require('mongoose');
 
@@ -65,13 +67,13 @@ const createPlace = async (req, res, next) => {
         description,
         address,
         location: coordinates,
-        image: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Empire_State_Building_%28aerial_view%29.jpg/400px-Empire_State_Building_%28aerial_view%29.jpg',
-        creator,
+        image: req.file.path,
+        creator: req.userData.userId,
     });
 
     let user;
     try {
-        user = await User.findById(creator);
+        user = await User.findById(req.userData.userId);
     } catch (err) {
         const error = new HttpError('Creating place failed, please try again', 500);
         return next(error);
@@ -115,6 +117,11 @@ const updatePlace = async (req, res, next) => {
         return next(error);
     }
 
+    if (place.creator.toString() !== req.userData.userId) {
+        const error = new HttpError('You are not allow.', 403);
+        return next(error);
+    }
+
     place.title = title;
     place.description = description;
 
@@ -144,6 +151,13 @@ const deletePlace = async (req, res, next) => {
         return next(error);
     }
 
+    if (place.creator.id !== req.userData.userId) {
+        const error = new HttpError('You are not allow  to delete this place.', 403);
+        next(error);
+    }
+
+    const imagePath = place.image;
+
     try {
         const sess = await mongoose.startSession();
         sess.startTransaction();
@@ -155,6 +169,10 @@ const deletePlace = async (req, res, next) => {
         const error = new HttpError('Something went wrong, could not delete place.', 500);
         return next(error);
     }
+
+    fs.unlink(imagePath, (err) => {
+        console.log(err);
+    });
 
     res.status(200).json({ message: 'Deleted place.' });
 };
